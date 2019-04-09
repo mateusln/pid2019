@@ -34,9 +34,14 @@ public class ProcessadorImagemController implements Initializable {
 		System.out.println("abriu");
 		
 		FileChooser fileChooser = new FileChooser();
-		ExtensionFilter filter = new ExtensionFilter("teste", "*.png");
+		FileChooser.ExtensionFilter extFilter =
+		new FileChooser.ExtensionFilter(
+				"Arquivos de imagem",
+				"*.png",
+				"*.jpeg");
+		fileChooser.getExtensionFilters().add(extFilter);
         fileChooser.setTitle("Selecionar imagem");
-        fileChooser.setSelectedExtensionFilter(filter);
+        
         arquivo_imagem = fileChooser.showOpenDialog(open_btn.getScene().getWindow());
 
         if(arquivo_imagem != null) {
@@ -46,13 +51,9 @@ public class ProcessadorImagemController implements Initializable {
 
     @Override
     public void initialize(URL location, ResourceBundle resources) {
-//        File file = new File("src/Box13.jpg");
-//        Image image = new Image(file.toURI().toString());
-//        imageView.setImage(image);
         
         System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
-	      
- 	  
+	      	  
  	      
     }
     
@@ -77,14 +78,17 @@ public class ProcessadorImagemController implements Initializable {
 	
 	public void converter_tons_cinza() {
 		
-		String local = arquivo_imagem.getAbsolutePath();
-//	      System.out.print("Convert the image at " + location + " in gray scale... ");
-	      // get the jpeg image from the internal resource folder
-	      Mat image = Imgcodecs.imread(local);
-	      // convert the image in gray scale
-	      Imgproc.cvtColor(image, image, Imgproc.COLOR_BGR2GRAY);
-	      Image imageToShow = Utils.mat2Image(image);
-	      updateImageView(img_carregada, imageToShow);
+		try {
+			String local = arquivo_imagem.getAbsolutePath();
+			// get the jpeg image from the internal resource folder
+			Mat image = Imgcodecs.imread(local);
+		    // convert the image in gray scale
+		    Imgproc.cvtColor(image, image, Imgproc.COLOR_BGR2GRAY);
+		    Image imageToShow = Utils.mat2Image(image);
+		    updateImageView(img_carregada, imageToShow);
+		}catch(Exception e ) {
+			//@todo mostrar msg na tela
+		}
 		
 	}
 	
