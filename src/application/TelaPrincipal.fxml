@@ -32,10 +32,10 @@
               <MenuItem mnemonicParsing="false" onAction="#converter_tons_cinza" text="Converter p/ tons de cinza" />
             </items>
             <items>
-              <MenuItem mnemonicParsing="false" text="Limiarizar" />
+              <MenuItem mnemonicParsing="false" onAction="#limiarizar" text="Limiarizar" />
             </items>
             <items>
-              <MenuItem mnemonicParsing="false" text="Ler Cod. Barras" />
+              <MenuItem mnemonicParsing="false" onAction="#segmentar" text="Ler Cod. Barras" />
             </items>
           </Menu>
           <Menu mnemonicParsing="false" text="Help">
