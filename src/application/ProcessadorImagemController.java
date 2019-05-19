@@ -158,6 +158,7 @@ public class ProcessadorImagemController implements Initializable {
 				Imgproc.drawContours(image_out, Arrays.asList(mp), 0, new Scalar(255,0,0), 2);
 			}
 		}
+		
 		Image imageToShow = Utils.mat2Image(image_out);
 		updateImageView(img_carregada, imageToShow);	
 	}
