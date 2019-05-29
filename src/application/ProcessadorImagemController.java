@@ -106,8 +106,11 @@ public class ProcessadorImagemController implements Initializable {
 	
 	public void limiarizar() { 
 		Mat image = Imgcodecs.imread(arquivo_imagem.getAbsolutePath(), Imgcodecs.IMREAD_GRAYSCALE);  
-		Mat kernel = Mat.ones(1, 3, CvType.CV_8U);
-		Imgproc.morphologyEx(image, image, Imgproc.MORPH_BLACKHAT, kernel, new Point(1,0));
+		//forma antiga
+//		Mat kernel = Mat.ones(1, 3, CvType.CV_8U);
+//		Imgproc.morphologyEx(image, image, Imgproc.MORPH_BLACKHAT, kernel, new Point(1,0));
+		Imgproc.threshold(image, image, 200, 500, Imgproc.THRESH_BINARY);
+		mede_tamanho_barras(image);
 		Image imageToShow = Utils.mat2Image(image);
 		updateImageView(img_carregada, imageToShow);	
 	}
