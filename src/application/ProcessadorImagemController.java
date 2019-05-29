@@ -39,6 +39,9 @@ public class ProcessadorImagemController implements Initializable {
     
     private File arquivo_imagem;
     
+    private int pixel_inicial_cod_barra;
+
+    
 	public void abrir_imagem() throws FileNotFoundException {
 		System.out.println("abriu");
 		
@@ -47,6 +50,7 @@ public class ProcessadorImagemController implements Initializable {
 		new FileChooser.ExtensionFilter(
 				"Arquivos de imagem",
 				"*.png",
+				"*.jpg",
 				"*.jpeg");
 		fileChooser.getExtensionFilters().add(extFilter);
         fileChooser.setTitle("Selecionar imagem");
@@ -176,4 +180,109 @@ public class ProcessadorImagemController implements Initializable {
         updateImageView(img_carregada, imageToShow);
 		
 	}
+	
+	private int mede_tamanho_barras(Mat image) {
+		
+		int num_colunas = image.cols();
+//		int num_linhas = image.rows();
+
+		double valores_linha[] = new double[num_colunas];
+		
+		//pega intensidade das barras em uma linha
+		for (int i=0 ; i<num_colunas ; i++) {
+			double array_temp[] = image.get(62,i); // pega na linha 62 @todo otimizar para pegar varias linhas
+			valores_linha[i] = array_temp[0];
+			System.out.print(array_temp[0]+", ");
+		}
+		
+		int soma_pixels = 0;
+		char cor = 'b';//assume que a primeira cor é branca
+		if(valores_linha[0] < 125)//se intensidade do primeiro pixel for menor q 125 , primeiro pixel é preto
+			cor = 'p';
+		
+		int tam_barra_branca = 0;
+		int tam_barra_preta = 0;
+		int bit_size = -1;
+		
+		
+		//pega intensidade das barras
+		for (int i = 1; i < valores_linha.length ; i++) {
+			soma_pixels++;
+			//se existe uma transição de cores
+			if(valores_linha[i-1] != valores_linha[i]){				
+				int tamanho_da_barra = soma_pixels;
+				System.out.println(tamanho_da_barra);
+				
+				if(cor == 'b')
+					tam_barra_branca = tamanho_da_barra;
+				else
+					tam_barra_preta = tamanho_da_barra;
+				//confere se as 3 proximas barras tem tamanhos iguais
+				if(tam_barra_branca == tam_barra_preta) {
+						pixel_inicial_cod_barra = i+tamanho_da_barra;
+						bit_size = tam_barra_preta;
+						break;
+					
+				}
+				soma_pixels = 0;
+				cor = muda_cor(cor);
+			}
+		}
+		
+		ler_digito(valores_linha, bit_size);
+		return bit_size;
+		
+	}
+	
+	private void ler_digito(double [] valores_linha, int bit_size){
+		int contador_bits=0;
+		for(int i=pixel_inicial_cod_barra; i<valores_linha.length; i+=bit_size) {
+			if(valores_linha[i] > 100)
+				System.out.print(0);
+			else
+				System.out.print(1);
+			
+			contador_bits++;
+			if(contador_bits == 7) {
+				contador_bits = 0;
+				System.out.print('|');
+			}
+			
+		}
+		contador_bits = 0;
+		System.out.println(" ---- bits detectados");
+		for(int i=0; i<valores_linha.length; i++) {
+			
+			if(i== pixel_inicial_cod_barra)
+				System.out.println(" comecei valores dos pixels em 0 ou 1 \n");
+			
+			if(valores_linha[i] > 100)
+				System.out.print(0);
+			else
+				System.out.print(1);
+			if(i>=pixel_inicial_cod_barra)
+				contador_bits++;
+			if(contador_bits == (7*bit_size)) {
+				contador_bits = 0;
+				System.out.print('|');
+			}
+			
+		}
+	}
+	
+	private char muda_cor(char cor) {
+		if(cor == 'b')
+			cor = 'p';
+		else
+			cor = 'b';
+		return cor;
+		
+	}
+	
+	public void mostrar_img(Mat mat_img) {
+		Image imageToShow = Utils.mat2Image(mat_img);
+		updateImageView(img_carregada, imageToShow);
+	}
+	
+	
 }
