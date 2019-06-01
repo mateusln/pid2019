@@ -6,6 +6,7 @@ import java.io.FileNotFoundException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.ResourceBundle;
 
@@ -18,6 +19,9 @@ import org.opencv.core.Scalar;
 import org.opencv.core.Size;
 import org.opencv.imgcodecs.Imgcodecs;
 import org.opencv.imgproc.Imgproc;
+
+import com.sun.xml.internal.ws.util.StringUtils;
+
 import org.opencv.core.MatOfPoint;
 import org.opencv.core.MatOfPoint2f;
 import org.opencv.core.Point;
@@ -128,13 +132,21 @@ public class ProcessadorImagemController implements Initializable {
 	    
 		Imgproc.morphologyEx(image, image, Imgproc.MORPH_BLACKHAT, kernel, new Point(1,0));
 		Imgproc.threshold(image, image, 10, 255, Imgproc.THRESH_BINARY);
-		
+//		File file2 = new File(img1); 
+		Imgcodecs.imwrite("file1.jpg", image); 
+
 		kernel = Mat.ones(1, 5, CvType.CV_8U);
 		Imgproc.morphologyEx(image, image, Imgproc.MORPH_DILATE, kernel, new Point(2,0), 2);
 		Imgproc.morphologyEx(image, image, Imgproc.MORPH_CLOSE, kernel,  new Point(2,0), 2);
 		
+		Imgcodecs.imwrite("file2.jpg", image); 
+
+		
 		kernel = Mat.ones(21, 35, CvType.CV_8U);
 		Imgproc.morphologyEx(image, image, Imgproc.MORPH_OPEN, kernel, new Point(-1,-1), 1);
+		
+		Imgcodecs.imwrite("file3.jpg", image); 
+
 		
 		//
 		Mat image_out = Imgcodecs.imread(arquivo_imagem.getAbsolutePath());
@@ -220,7 +232,7 @@ public class ProcessadorImagemController implements Initializable {
 					tam_barra_branca = tamanho_da_barra;
 				else
 					tam_barra_preta = tamanho_da_barra;
-				//confere se as 3 proximas barras tem tamanhos iguais
+				//confere se as 2 proximas barras tem tamanhos iguais
 				if(tam_barra_branca == tam_barra_preta) {
 						pixel_inicial_cod_barra = i+tamanho_da_barra;
 						bit_size = tam_barra_preta;
@@ -239,16 +251,32 @@ public class ProcessadorImagemController implements Initializable {
 	
 	private void ler_digito(double [] valores_linha, int bit_size){
 		int contador_bits=0;
-		for(int i=pixel_inicial_cod_barra; i<valores_linha.length; i+=bit_size) {
-			if(valores_linha[i] > 100)
-				System.out.print(0);
-			else
-				System.out.print(1);
+		String vet_bit = "";
+		int digito=0;
+		for(int i=pixel_inicial_cod_barra; i<valores_linha.length; i+=bit_size) {//pula o tam do bit no vetor
 			
-			contador_bits++;
+			double valores_uma_barra[] = Arrays.copyOfRange(valores_linha, i, i+bit_size);
+			
+			char bit = verifica_bit(valores_uma_barra);
+			System.out.print(bit);
+			vet_bit += bit;
+			
+//			teste.
+//			if(valores_linha[i] > 100)
+//				System.out.print(0);
+//			else
+//				System.out.print(1);
+			
+			contador_bits++;// a cada 7 bits adiciona um separador pq é um digito
 			if(contador_bits == 7) {
+				digito++;
 				contador_bits = 0;
 				System.out.print('|');
+				System.out.println(digito);
+//				System.out.println(vet_bit+'\n');
+//				aproxima_valores(vet_bit);
+				vet_bit = "";
+//				if(digito==6)
 			}
 			
 		}
@@ -282,10 +310,167 @@ public class ProcessadorImagemController implements Initializable {
 		
 	}
 	
+	//retorna se a intensidade da cor vai ser interpretada como 1 (preto) ou 0 (branco)
+	private char verifica_bit(double []valores_intensidade_cor) {
+		//contagem de pixels
+		int conta_branco =0;
+		int conta_preto =0;
+		
+		for (double v : valores_intensidade_cor) {
+			if(v > 125)
+				conta_branco++;
+			else
+				conta_preto++;
+		}
+		
+		if(conta_branco > conta_preto)
+			return '0';
+		else
+			return '1';
+	}
+	
 	public void mostrar_img(Mat mat_img) {
 		Image imageToShow = Utils.mat2Image(mat_img);
 		updateImageView(img_carregada, imageToShow);
 	}
+	
+	public int tabela_lado_esquerdo(String cadeia_bits) {
+//		HashMap<K, V>
+		HashMap<String,Integer> tabela_hash = new HashMap<String,Integer>();
+		tabela_hash.put("0001101", 0);
+		tabela_hash.put("0100111", 0);
+		tabela_hash.put("0011001", 1);
+		tabela_hash.put("0110011", 1);
+		tabela_hash.put("0010011", 2);
+		tabela_hash.put("0011011", 2);
+		tabela_hash.put("0111101", 3);
+		tabela_hash.put("0100001", 3);
+		tabela_hash.put("0100011", 4);
+		tabela_hash.put("0011101", 4);
+		tabela_hash.put("0110001", 5);
+		tabela_hash.put("0111001", 5);
+		tabela_hash.put("0101111", 6);
+		tabela_hash.put("0000101", 6);
+		tabela_hash.put("0111011", 7);
+		tabela_hash.put("0010001", 7);
+		tabela_hash.put("0110111", 8);
+		tabela_hash.put("0001001", 8);
+		tabela_hash.put("0001011", 9);
+		tabela_hash.put("0010111", 9);
+		
+		return -1;
+		
+	}
+	
+	String aproxima_valores (String valor) {
+		ArrayList<String> valores_possiveis = new ArrayList<String>();
+		valores_possiveis.add("0001101");
+		valores_possiveis.add("0100111");
+		valores_possiveis.add("0011001");
+		valores_possiveis.add("0110011");
+		valores_possiveis.add("0010011");
+		valores_possiveis.add("0011011");
+		valores_possiveis.add("0111101");
+		valores_possiveis.add("0100001");
+		valores_possiveis.add("0100011");
+		valores_possiveis.add("0011101");
+		valores_possiveis.add("0110001");
+		valores_possiveis.add("0111001");
+		valores_possiveis.add("0101111");
+		valores_possiveis.add("0000101");
+		valores_possiveis.add("0111011");
+		valores_possiveis.add("0010001");
+		valores_possiveis.add("0110111");
+		valores_possiveis.add("0001001");
+		valores_possiveis.add("0001011");
+		valores_possiveis.add("0010111");
+		
+		System.out.println("Aproximidade");
+		for (String v : valores_possiveis) {
+			double distancia = levenshtein_distance(valor, v, 10);
+			System.out.println(v);
+			System.out.println(distancia);
+			
+		}
+		return "str";
+		
+	}
+	
+	
+	//calcula proximidade
+	public double levenshtein_distance(final String s1, final String s2,
+            final int limit) {
+if (s1 == null) {
+throw new NullPointerException("s1 must not be null");
+}
+
+if (s2 == null) {
+throw new NullPointerException("s2 must not be null");
+}
+
+if (s1.equals(s2)) {
+return 0;
+}
+
+if (s1.length() == 0) {
+return s2.length();
+}
+
+if (s2.length() == 0) {
+return s1.length();
+}
+
+// create two work vectors of integer distances
+int[] v0 = new int[s2.length() + 1];
+int[] v1 = new int[s2.length() + 1];
+int[] vtemp;
+
+// initialize v0 (the previous row of distances)
+// this row is A[0][i]: edit distance for an empty s
+// the distance is just the number of characters to delete from t
+for (int i = 0; i < v0.length; i++) {
+v0[i] = i;
+}
+
+for (int i = 0; i < s1.length(); i++) {
+// calculate v1 (current row distances) from the previous row v0
+// first element of v1 is A[i+1][0]
+//   edit distance is delete (i+1) chars from s to match empty t
+v1[0] = i + 1;
+
+int minv1 = v1[0];
+
+// use formula to fill in the rest of the row
+for (int j = 0; j < s2.length(); j++) {
+int cost = 1;
+if (s1.charAt(i) == s2.charAt(j)) {
+cost = 0;
+}
+v1[j + 1] = Math.min(
+   v1[j] + 1,              // Cost of insertion
+   Math.min(
+           v0[j + 1] + 1,  // Cost of remove
+           v0[j] + cost)); // Cost of substitution
+
+minv1 = Math.min(minv1, v1[j + 1]);
+}
+
+if (minv1 >= limit) {
+return limit;
+}
+
+// copy v1 (current row) to v0 (previous row) for next iteration
+//System.arraycopy(v1, 0, v0, 0, v0.length);
+
+// Flip references to current and previous row
+vtemp = v0;
+v0 = v1;
+v1 = vtemp;
+
+}
+
+return v0[s2.length()];
+}
 	
 	
 }
