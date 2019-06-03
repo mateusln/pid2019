@@ -44,6 +44,11 @@ public class ProcessadorImagemController implements Initializable {
     private File arquivo_imagem;
     
     private int pixel_inicial_cod_barra;
+    
+    private int bit_size;
+    
+    int pixel_inicial_direita;
+    int pixel_final_direita;
 
     
 	public void abrir_imagem() throws FileNotFoundException {
@@ -196,10 +201,10 @@ public class ProcessadorImagemController implements Initializable {
 		
 	}
 	
+	//mede tamanho das barras iniciais
 	private int mede_tamanho_barras(Mat image) {
 		
 		int num_colunas = image.cols();
-//		int num_linhas = image.rows();
 
 		double valores_linha[] = new double[num_colunas];
 		
@@ -207,7 +212,6 @@ public class ProcessadorImagemController implements Initializable {
 		for (int i=0 ; i<num_colunas ; i++) {
 			double array_temp[] = image.get(62,i); // pega na linha 62 @todo otimizar para pegar varias linhas
 			valores_linha[i] = array_temp[0];
-			System.out.print(array_temp[0]+", ");
 		}
 		
 		int soma_pixels = 0;
@@ -217,7 +221,7 @@ public class ProcessadorImagemController implements Initializable {
 		
 		int tam_barra_branca = 0;
 		int tam_barra_preta = 0;
-		int bit_size = -1;
+		bit_size = -1;
 		
 		
 		//pega intensidade das barras
@@ -234,7 +238,7 @@ public class ProcessadorImagemController implements Initializable {
 					tam_barra_preta = tamanho_da_barra;
 				//confere se as 2 proximas barras tem tamanhos iguais
 				if(tam_barra_branca == tam_barra_preta) {
-						pixel_inicial_cod_barra = i+tamanho_da_barra;
+						pixel_inicial_cod_barra = i+tamanho_da_barra; // pula a terceira barra
 						bit_size = tam_barra_preta;
 						break;
 					
@@ -245,14 +249,177 @@ public class ProcessadorImagemController implements Initializable {
 		}
 		
 		ler_digito(valores_linha, bit_size);
+		ler_parte_direita(valores_linha);
+
 		return bit_size;
+		
+	}
+	
+	int mapeia_meio_cod_Barras(double [] valores_linha, int  bit_size) {
+		int tam_um_digito = bit_size*7;
+		int fim_primeira_metade = tam_um_digito*6;
+		int soma_pixels = 0;
+		int tam_barra_branca = -1;
+		int tam_barra_preta = -1;
+		int pixel_inicial_direita;
+		int barras_iguais = 0;
+		char cor = 'b';
+		
+		System.out.println("conta a partir do meio: ");
+		boolean achei_inicio = false;
+		
+		if(valores_linha[fim_primeira_metade] < 125) {
+			cor = 'p';
+		}
+		
+		for (int i = fim_primeira_metade; i < valores_linha.length; i++) {
+			if(valores_linha[i] > 100)
+				System.out.print(0);
+			else
+				System.out.print(1);
+			//se achar a parte branca começa a leitura
+			if(!achei_inicio && valores_linha[i] > 125) {
+				achei_inicio = true;
+			}
+			
+			if(!achei_inicio)
+				continue;
+			
+			double [] cadeia_de_pixels = Arrays.copyOfRange(valores_linha, i, i+bit_size);
+			char vr_bit = verifica_bit(cadeia_de_pixels);
+			i+=(bit_size-1);
+			
+//			System.out.println("bit "+vr_bit);
+			//se existe uma transição de cores
+			soma_pixels++;
+//			if(valores_linha[i-1] != valores_linha[i]){				
+//				int tamanho_da_barra = soma_pixels;
+//				
+//				if(cor == 'b')
+//					tam_barra_branca = tamanho_da_barra;
+//				else
+//					tam_barra_preta = tamanho_da_barra;
+//				//confere se as 2 proximas barras tem tamanhos iguais
+//				if(tam_barra_branca == tam_barra_preta) {
+//						barras_iguais+=2;
+////						pixel_inicial_direita = i+(2*tamanho_da_barra); // pula a quarta barra
+////						return pixel_inicial_direita;
+//					
+//						System.out.println("\n barras iguais -> "+barras_iguais);
+//						System.out.println("POS -> "+i);
+//				}
+//					
+//				soma_pixels = 0;
+//				cor = muda_cor(cor);
+//			}
+//			
+			//dewbug
+//			
+		}
+		
+		return -1;
+	}
+	
+	void ler_parte_direita(double [] valores_linha) {
+		char cor = 'b';
+		int pos_ultima_barra = 0;
+		
+		for (int i = (valores_linha.length-1); i > 1; i--) {
+			if(valores_linha[i] != valores_linha[i-1]) {
+				pos_ultima_barra=i;
+				break;
+			}
+		}
+		
+		int soma_pixels = 0;
+		int tam_barra_preta = 0;
+		int tam_barra_branca = 0;
+		int transicoes = 0;
+		
+		cor = 'p';
+		//começa lendo de trás pra frente a partir da última barra preta
+		for (int i = pos_ultima_barra; i > 1; i--) {
+			soma_pixels++;
+			
+			//transicao de cor
+			if(valores_linha[i] != valores_linha[i-1]) {
+				transicoes++;
+				
+//				metodo antigo
+//				if(cor=='p')
+//					tam_barra_preta = soma_pixels;
+//				else
+//					tam_barra_branca = soma_pixels;
+//				
+//				//confere se as 2 proximas barras tem tamanhos iguais
+//				if(tam_barra_branca == tam_barra_preta) {
+//						pixel_final_direita = i-tam_barra_branca; // pula a terceira barra
+//						bit_size = tam_barra_branca;
+//						break;
+//					
+//				}
+				
+				if(transicoes == 4) {
+					pixel_final_direita = i;
+					bit_size = (soma_pixels/3);
+				}
+					
+			}
+		}
+		
+		int tam_digito = bit_size * 7;
+		int tam_parte_direita = tam_digito * 6;
+		int inicio_pt_direita = pixel_final_direita - tam_parte_direita;
+		
+		System.out.println("\n pixel final"+ pixel_final_direita);
+		System.out.println("\n inicio pixel da direita ="+inicio_pt_direita);
+		imprimir_pixels_binarios(valores_linha);
+		
+		int contador_bits=0;
+		String vet_bit = "";
+		int digito = -1;
+		for(int i=inicio_pt_direita; i<valores_linha.length; i+=bit_size) {//pula o tam do bit no vetor
+			
+			double valores_uma_barra[] = Arrays.copyOfRange(valores_linha, i, i+bit_size);
+			
+			char bit = verifica_bit(valores_uma_barra);
+			vet_bit += bit;
+			
+			contador_bits++;// a cada 7 bits adiciona um separador pq é um digito
+			if(contador_bits == 7) {
+				digito++;
+				contador_bits = 0;
+				System.out.print('|');
+//				System.out.println(digito);
+				System.out.println(vet_bit+'\n');
+				
+				aproxima_valores(vet_bit,true);
+				vet_bit = "";
+				if(digito==6)//para a leitura no sexto digito
+					break ;
+			}
+			
+		}
+		
+		
+	}
+	
+	
+	//recebe um vetor com a intensidade do pixel 
+	void imprimir_pixels_binarios(double [] valores_linha){
+		for (double d : valores_linha) {
+			if(d>125)
+				System.out.print(0);
+			else
+				System.out.print(1);
+		}
 		
 	}
 	
 	private void ler_digito(double [] valores_linha, int bit_size){
 		int contador_bits=0;
 		String vet_bit = "";
-		int digito=0;
+		int digito = 0;
 		for(int i=pixel_inicial_cod_barra; i<valores_linha.length; i+=bit_size) {//pula o tam do bit no vetor
 			
 			double valores_uma_barra[] = Arrays.copyOfRange(valores_linha, i, i+bit_size);
@@ -272,15 +439,32 @@ public class ProcessadorImagemController implements Initializable {
 				digito++;
 				contador_bits = 0;
 				System.out.print('|');
-				System.out.println(digito);
-//				System.out.println(vet_bit+'\n');
+//				System.out.println(digito);
+				System.out.println(vet_bit+'\n');
 //				aproxima_valores(vet_bit);
 				vet_bit = "";
-//				if(digito==6)
+				if(digito==6)//para a leitura no sexto digito
+					break ;
 			}
 			
 		}
-		contador_bits = 0;
+		
+//		this.pixel_inicial_direita = mapeia_meio_cod_Barras(valores_linha, bit_size);
+		imprimir_valores_pixels(valores_linha);
+		
+	}
+	
+	private char muda_cor(char cor) {
+		if(cor == 'b')
+			cor = 'p';
+		else
+			cor = 'b';
+		return cor;
+		
+	}
+	
+	void imprimir_valores_pixels (double [] valores_linha) {
+		int contador_bits = 0;
 		System.out.println(" ---- bits detectados");
 		for(int i=0; i<valores_linha.length; i++) {
 			
@@ -298,16 +482,11 @@ public class ProcessadorImagemController implements Initializable {
 				System.out.print('|');
 			}
 			
+			if(i==pixel_inicial_direita)
+				System.out.println("\n MEIO ");
+			
+			
 		}
-	}
-	
-	private char muda_cor(char cor) {
-		if(cor == 'b')
-			cor = 'p';
-		else
-			cor = 'b';
-		return cor;
-		
 	}
 	
 	//retorna se a intensidade da cor vai ser interpretada como 1 (preto) ou 0 (branco)
@@ -358,10 +537,13 @@ public class ProcessadorImagemController implements Initializable {
 		tabela_hash.put("0001011", 9);
 		tabela_hash.put("0010111", 9);
 		
-		return -1;
+		
+		return tabela_hash.get(cadeia_bits);
 		
 	}
 	
+	
+	//pega o valor lido e aproxima ele a um valor da tabela
 	String aproxima_valores (String valor) {
 		ArrayList<String> valores_possiveis = new ArrayList<String>();
 		valores_possiveis.add("0001101");
@@ -386,13 +568,60 @@ public class ProcessadorImagemController implements Initializable {
 		valores_possiveis.add("0010111");
 		
 		System.out.println("Aproximidade");
+		double menor_distancia = 10;
+		String valor_na_tabela_bin = "";
 		for (String v : valores_possiveis) {
 			double distancia = levenshtein_distance(valor, v, 10);
-			System.out.println(v);
-			System.out.println(distancia);
+			
+			if(distancia < menor_distancia) {
+				System.out.println(v);
+				System.out.println(distancia);
+				valor_na_tabela_bin = v;
+				menor_distancia = distancia;
+			}
 			
 		}
-		return "str";
+		
+		System.out.println(tabela_lado_esquerdo(valor_na_tabela_bin));
+		
+		return valor_na_tabela_bin;
+		
+	}
+	
+	String aproxima_valores (String valor, boolean direita) {
+		ArrayList<String> valores_possiveis = new ArrayList<String>();
+		
+		//lado direito
+		valores_possiveis.add("1110010"); //0
+		valores_possiveis.add("1100110"); //1
+		valores_possiveis.add("1101100"); //2
+		valores_possiveis.add("1000010"); //3
+		valores_possiveis.add("1011100"); //4
+		valores_possiveis.add("1001110"); //5
+		valores_possiveis.add("1010000"); //6
+		valores_possiveis.add("1000100"); //7
+		valores_possiveis.add("1001000"); //8
+		valores_possiveis.add("1110100"); //9
+		
+		
+		System.out.println("Aproximidade");
+		double menor_distancia = 10;
+		String valor_na_tabela_bin = "";
+		for (String v : valores_possiveis) {
+			double distancia = levenshtein_distance(valor, v, 10);
+			
+			if(distancia < menor_distancia) {
+				System.out.println(v);
+				System.out.println(distancia);
+				valor_na_tabela_bin = v;
+				menor_distancia = distancia;
+			}
+			
+		}
+		
+		System.out.println("resultado da consulta "+(valor_na_tabela_bin));
+		
+		return valor_na_tabela_bin;
 		
 	}
 	
