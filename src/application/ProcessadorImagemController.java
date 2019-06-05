@@ -3,7 +3,9 @@ package application;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.lang.reflect.Array;
 import java.net.URL;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -17,6 +19,7 @@ import org.opencv.core.Range;
 import org.opencv.core.RotatedRect;
 import org.opencv.core.Scalar;
 import org.opencv.core.Size;
+import org.opencv.highgui.HighGui;
 import org.opencv.imgcodecs.Imgcodecs;
 import org.opencv.imgproc.Imgproc;
 
@@ -47,12 +50,16 @@ public class ProcessadorImagemController implements Initializable {
     
     private int bit_size;
     
+    private double ang_rotacao = 0;
+    
     int pixel_inicial_direita;
     int pixel_final_direita;
+    
+    int pos_inicial;
+    int pos_final;
 
     
 	public void abrir_imagem() throws FileNotFoundException {
-		System.out.println("abriu");
 		
 		FileChooser fileChooser = new FileChooser();
 		FileChooser.ExtensionFilter extFilter =
@@ -79,19 +86,13 @@ public class ProcessadorImagemController implements Initializable {
  	      
     }
     
-//    private void test_img_padrao() {
-//    	 // prepare to convert a RGB image in gray scale
-//	      String local = "resources/Poli.jpg";
-////	      System.out.print("Convert the image at " + location + " in gray scale... ");
-//	      // get the jpeg image from the internal resource folder
-//	      Mat image = Imgcodecs.imread(local);
-////	      Mat test = new Mat
-//	      Image imageToShow = Utils.mat2Image(image);
-////	      img_carregada.setImage(imageToShow);
-//	      // convert the image in gray scale
-////	      Imgproc.cvtColor(image, image, Imgproc.COLOR_BGR2GRAY);
-//	      updateImageView(img_carregada, imageToShow);
-//    }
+  private Mat roda_img(Mat image, double angle) {
+	  // tenta deixar o codigo de barras reto
+	  Mat transformacao = Imgproc.getRotationMatrix2D(new Point(image.cols()/2,image.rows()/2),(angle),1);
+	  Mat saida = new Mat();
+	  		Imgproc.warpAffine(image,image,transformacao,( new Size(image.cols(),image.rows())));
+	  		return image;
+  }
 
 	private void updateImageView(ImageView view, Image image)
 	{
@@ -115,16 +116,17 @@ public class ProcessadorImagemController implements Initializable {
 	
 	public void limiarizar() { 
 		Mat image = Imgcodecs.imread(arquivo_imagem.getAbsolutePath(), Imgcodecs.IMREAD_GRAYSCALE);  
-		//forma antiga
-//		Mat kernel = Mat.ones(1, 3, CvType.CV_8U);
-//		Imgproc.morphologyEx(image, image, Imgproc.MORPH_BLACKHAT, kernel, new Point(1,0));
-		Imgproc.threshold(image, image, 200, 500, Imgproc.THRESH_BINARY);
-		mede_tamanho_barras(image);
+
+		Imgproc.threshold(image, image, 200, 255, Imgproc.THRESH_BINARY);
+
 		Image imageToShow = Utils.mat2Image(image);
 		updateImageView(img_carregada, imageToShow);	
 	}
 	
 	public void segmentar() { 
+//		segmentar_v2();
+		long startTime = System.currentTimeMillis();
+	       
 		Mat image = Imgcodecs.imread(arquivo_imagem.getAbsolutePath(), Imgcodecs.IMREAD_GRAYSCALE);
 		
 		double scale =   800.0 / image.cols();
@@ -135,26 +137,34 @@ public class ProcessadorImagemController implements Initializable {
 		Mat kernel = Mat.ones(1, 3, CvType.CV_8U);
 		System.out.println(kernel.dump());
 	    
-		Imgproc.morphologyEx(image, image, Imgproc.MORPH_BLACKHAT, kernel, new Point(1,0));
+		Imgproc.morphologyEx(image, image, Imgproc.MORPH_BLACKHAT, kernel, new Point(2,0));
 		Imgproc.threshold(image, image, 10, 255, Imgproc.THRESH_BINARY);
-//		File file2 = new File(img1); 
-		Imgcodecs.imwrite("file1.jpg", image); 
+		
+		Imgcodecs.imwrite("passo_1.jpg", image);
+		
+		//alinha a img calculando o ang pelo transformada de hough
+		runHoughLines(image);
+		image= roda_img(image, this.ang_rotacao);
 
+		//dilatamento e fechamento com mascaras horizontais
 		kernel = Mat.ones(1, 5, CvType.CV_8U);
+
 		Imgproc.morphologyEx(image, image, Imgproc.MORPH_DILATE, kernel, new Point(2,0), 2);
 		Imgproc.morphologyEx(image, image, Imgproc.MORPH_CLOSE, kernel,  new Point(2,0), 2);
 		
-		Imgcodecs.imwrite("file2.jpg", image); 
-
+		Imgcodecs.imwrite("passo_2.jpg", image); 
 		
+//		runHoughLines(image);
+
+		//abertura grande para agrupar o que restou
 		kernel = Mat.ones(21, 35, CvType.CV_8U);
 		Imgproc.morphologyEx(image, image, Imgproc.MORPH_OPEN, kernel, new Point(-1,-1), 1);
 		
-		Imgcodecs.imwrite("file3.jpg", image); 
+		Imgcodecs.imwrite("passo_3.jpg", image); 
 
-		
 		//
 		Mat image_out = Imgcodecs.imread(arquivo_imagem.getAbsolutePath());
+		image_out = roda_img(image_out, this.ang_rotacao);
 		List<MatOfPoint> contours = new ArrayList<>();
 		Mat hierarchy = new Mat();
 		Imgproc.findContours(image, contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_NONE);
@@ -183,8 +193,58 @@ public class ProcessadorImagemController implements Initializable {
 			}
 		}
 		
-		Image imageToShow = Utils.mat2Image(image_out);
-		updateImageView(img_carregada, imageToShow);	
+//		Image imageToShow = Utils.mat2Image(image_out);
+//		updateImageView(img_carregada, imageToShow);
+		
+		long endTime = System.currentTimeMillis();
+	   double tempo = (endTime-startTime); 
+		String texto = String.format("Angulo do cod de barras %.2f graus | tempo %.1f em ms", ang_rotacao,tempo);
+//		String texto = "Angulo do cod de barras %.2d graus";
+		adiciona_texto_img(texto, image_out);
+		HighGui.imshow("nome", image_out);
+		HighGui.waitKey();
+        
+        HighGui.destroyWindow("nome");
+	}
+	
+	
+	public void segmentar_v2() {
+		Mat image = Imgcodecs.imread(arquivo_imagem.getAbsolutePath(), Imgcodecs.IMREAD_GRAYSCALE);
+		
+		double scale =   800.0 / image.cols();
+		Mat resizeImage = new Mat(( int) (image.rows() * scale), (int) (image.cols() * scale), image.type());
+	    Imgproc.resize(image, image, resizeImage.size());
+	    
+//		Mat kernel = Mat.ones(1, 3, CvType.CV_8U);
+//		System.out.println(kernel.dump());
+	    
+		Mat img_x, img_y, resultado;
+		img_x = new Mat();
+		img_y = new Mat();
+		resultado = new Mat();
+		Imgproc.Sobel(image, img_x, CvType.CV_8U, 1, 0, -1);
+		Imgcodecs.imwrite("seg_v2passo_1.jpg", img_x);
+		Imgproc.Sobel(image, img_y, CvType.CV_8U, 0, 1, -1);
+		Imgcodecs.imwrite("seg_v2passo_2.jpg", img_y);
+		Core.subtract(img_x, img_y, resultado);
+		Imgcodecs.imwrite("seg_v2passo_3.jpg", resultado);
+		
+		
+//		Mat kernel = Mat.ones(9, 9, CvType.CV_8U);
+		Imgproc.blur(resultado, resultado, new Size(9,9));
+		Imgproc.threshold(resultado, resultado, 100, 255, Imgproc.THRESH_BINARY);
+		Imgcodecs.imwrite("seg_v2passo_4.jpg", resultado);
+		
+		Mat kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(21,7));
+		Imgproc.morphologyEx(resultado, resultado, Imgproc.MORPH_CLOSE, kernel);
+		Imgcodecs.imwrite("seg_v2passo_5.jpg", resultado);
+		
+		kernel = Mat.ones(1, 5, CvType.CV_8U);
+		Imgproc.erode(resultado, resultado, kernel,new Point(2,0),4);
+		Imgproc.dilate(resultado, resultado, kernel,new Point(2,0),4);
+		Imgcodecs.imwrite("seg_v2passo_6.jpg", resultado);
+
+
 	}
 	
 	// printar/testar os numeros da matrix 
@@ -228,7 +288,9 @@ public class ProcessadorImagemController implements Initializable {
 		for (int i = 1; i < valores_linha.length ; i++) {
 			soma_pixels++;
 			//se existe uma transição de cores
-			if(valores_linha[i-1] != valores_linha[i]){				
+			if(valores_linha[i-1] != valores_linha[i]){	
+				pos_inicial = i;
+				
 				int tamanho_da_barra = soma_pixels;
 				System.out.println(tamanho_da_barra);
 				
@@ -250,6 +312,7 @@ public class ProcessadorImagemController implements Initializable {
 		
 		ler_digito(valores_linha, bit_size);
 		ler_parte_direita(valores_linha);
+		pos_meio(valores_linha);
 
 		return bit_size;
 		
@@ -330,6 +393,7 @@ public class ProcessadorImagemController implements Initializable {
 				break;
 			}
 		}
+		pos_final = pos_ultima_barra;
 		
 		int soma_pixels = 0;
 		int tam_barra_preta = 0;
@@ -360,7 +424,7 @@ public class ProcessadorImagemController implements Initializable {
 //				}
 				
 				if(transicoes == 4) {
-					pixel_final_direita = i;
+					pixel_final_direita = i+bit_size+bit_size; // conta o ultimo bit branco
 					bit_size = (soma_pixels/3);
 				}
 					
@@ -373,11 +437,13 @@ public class ProcessadorImagemController implements Initializable {
 		
 		System.out.println("\n pixel final"+ pixel_final_direita);
 		System.out.println("\n inicio pixel da direita ="+inicio_pt_direita);
-		imprimir_pixels_binarios(valores_linha);
+		imprimir_pixels_binarios(Arrays.copyOfRange(valores_linha, inicio_pt_direita, valores_linha.length-1),bit_size);
 		
 		int contador_bits=0;
 		String vet_bit = "";
 		int digito = -1;
+		
+		//começa a ler do meio no sentido da esq p/ dir
 		for(int i=inicio_pt_direita; i<valores_linha.length; i+=bit_size) {//pula o tam do bit no vetor
 			
 			double valores_uma_barra[] = Arrays.copyOfRange(valores_linha, i, i+bit_size);
@@ -405,6 +471,33 @@ public class ProcessadorImagemController implements Initializable {
 	}
 	
 	
+	void pos_meio(double [] valores_linha) {
+		
+		String vet_bit = "";
+		int pos_meio = (pos_final - pos_inicial)/2;
+		int ponteiro = pos_inicial + pos_meio; // aponta p/ o meio do cod. de barras
+		ponteiro = ponteiro - (bit_size*8); //volta o ponteiro 6 bits p/ tras partindo do meio 
+		
+		imprimir_pixels_binarios(Arrays.copyOfRange(valores_linha,ponteiro,pos_final));
+		
+		int ultimos_5_bits = 5*bit_size;
+		for(int i=ponteiro; i<(valores_linha.length - ultimos_5_bits); i+=bit_size) {//pula o tam do bit no vetor
+					int inicio = i;
+					for (int j = 1; j <= 5  && j < valores_linha.length; j++) {
+						double valores_uma_barra[] = Arrays.copyOfRange(valores_linha, inicio, i+(bit_size*j));
+						char bit = verifica_bit(valores_uma_barra);
+						vet_bit += bit;
+						inicio = i+(bit_size*j);
+					}
+//					System.out.println(vet_bit);
+					
+//					break;
+					vet_bit = "";
+		}
+		
+	}
+	
+	
 	//recebe um vetor com a intensidade do pixel 
 	void imprimir_pixels_binarios(double [] valores_linha){
 		for (double d : valores_linha) {
@@ -415,6 +508,24 @@ public class ProcessadorImagemController implements Initializable {
 		}
 		
 	}
+	
+	//recebe um vetor com a intensidade do pixel 
+		void imprimir_pixels_binarios(double [] valores_linha, int bit_size){
+			int i=0;
+			for (double d : valores_linha) {
+				if(d>125)
+					System.out.print(0);
+				else
+					System.out.print(1);
+				
+				i++;
+				if(i == bit_size) {
+					i=0;
+					System.out.print("|");
+				}
+			}
+			
+		}
 	
 	private void ler_digito(double [] valores_linha, int bit_size){
 		int contador_bits=0;
@@ -625,81 +736,183 @@ public class ProcessadorImagemController implements Initializable {
 		
 	}
 	
-	
-	//calcula proximidade
-	public double levenshtein_distance(final String s1, final String s2,
-            final int limit) {
-if (s1 == null) {
-throw new NullPointerException("s1 must not be null");
-}
+	// calcula proximidade
+	public double levenshtein_distance(final String s1, final String s2, final int limit) {
+		if (s1 == null) {
+			throw new NullPointerException("s1 must not be null");
+		}
 
-if (s2 == null) {
-throw new NullPointerException("s2 must not be null");
-}
+		if (s2 == null) {
+			throw new NullPointerException("s2 must not be null");
+		}
 
-if (s1.equals(s2)) {
-return 0;
-}
+		if (s1.equals(s2)) {
+			return 0;
+		}
 
-if (s1.length() == 0) {
-return s2.length();
-}
+		if (s1.length() == 0) {
+			return s2.length();
+		}
 
-if (s2.length() == 0) {
-return s1.length();
-}
+		if (s2.length() == 0) {
+			return s1.length();
+		}
 
 // create two work vectors of integer distances
-int[] v0 = new int[s2.length() + 1];
-int[] v1 = new int[s2.length() + 1];
-int[] vtemp;
+		int[] v0 = new int[s2.length() + 1];
+		int[] v1 = new int[s2.length() + 1];
+		int[] vtemp;
 
 // initialize v0 (the previous row of distances)
 // this row is A[0][i]: edit distance for an empty s
 // the distance is just the number of characters to delete from t
-for (int i = 0; i < v0.length; i++) {
-v0[i] = i;
-}
+		for (int i = 0; i < v0.length; i++) {
+			v0[i] = i;
+		}
 
-for (int i = 0; i < s1.length(); i++) {
+		for (int i = 0; i < s1.length(); i++) {
 // calculate v1 (current row distances) from the previous row v0
 // first element of v1 is A[i+1][0]
 //   edit distance is delete (i+1) chars from s to match empty t
-v1[0] = i + 1;
+			v1[0] = i + 1;
 
-int minv1 = v1[0];
+			int minv1 = v1[0];
 
 // use formula to fill in the rest of the row
-for (int j = 0; j < s2.length(); j++) {
-int cost = 1;
-if (s1.charAt(i) == s2.charAt(j)) {
-cost = 0;
-}
-v1[j + 1] = Math.min(
-   v1[j] + 1,              // Cost of insertion
-   Math.min(
-           v0[j + 1] + 1,  // Cost of remove
-           v0[j] + cost)); // Cost of substitution
+			for (int j = 0; j < s2.length(); j++) {
+				int cost = 1;
+				if (s1.charAt(i) == s2.charAt(j)) {
+					cost = 0;
+				}
+				v1[j + 1] = Math.min(v1[j] + 1, // Cost of insertion
+						Math.min(v0[j + 1] + 1, // Cost of remove
+								v0[j] + cost)); // Cost of substitution
 
-minv1 = Math.min(minv1, v1[j + 1]);
-}
+				minv1 = Math.min(minv1, v1[j + 1]);
+			}
 
-if (minv1 >= limit) {
-return limit;
-}
+			if (minv1 >= limit) {
+				return limit;
+			}
 
 // copy v1 (current row) to v0 (previous row) for next iteration
 //System.arraycopy(v1, 0, v0, 0, v0.length);
 
 // Flip references to current and previous row
-vtemp = v0;
-v0 = v1;
-v1 = vtemp;
+			vtemp = v0;
+			v0 = v1;
+			v1 = vtemp;
 
-}
+		}
 
-return v0[s2.length()];
-}
+		return v0[s2.length()];
+	}
+
 	
-	
+	//traça as linhas com a transformada de hough
+    public void runHoughLines(Mat src) {
+        // Declare the output variables
+        Mat dst = new Mat(), cdst = new Mat(), cdstP;
+        // Edge detection
+        Imgproc.Canny(src, dst, 50, 200, 3, false);
+        // Copy edges to the images that will display the results in BGR
+        Imgproc.cvtColor(dst, cdst, Imgproc.COLOR_GRAY2BGR);
+        cdstP = cdst.clone();
+        // Standard Hough Line Transform
+        Mat lines = new Mat(); // will hold the results of the detection
+        Imgproc.HoughLines(dst, lines, 1, Math.PI/180, 150); // runs the actual detection
+        // Draw the lines
+        for (int x = 0; x < lines.rows(); x++) {
+            double rho = lines.get(x, 0)[0],
+                    theta = lines.get(x, 0)[1];
+            double a = Math.cos(theta), b = Math.sin(theta);
+            double x0 = a*rho, y0 = b*rho;
+            Point pt1 = new Point(Math.round(x0 + 1000*(-b)), Math.round(y0 + 1000*(a)));
+            Point pt2 = new Point(Math.round(x0 - 1000*(-b)), Math.round(y0 - 1000*(a)));
+            Imgproc.line(cdst, pt1, pt2, new Scalar(0, 0, 255), 3, Imgproc.LINE_AA, 0);
+        }
+        // Probabilistic Line Transform
+        Mat linesP = new Mat(); // will hold the results of the detection
+        Imgproc.HoughLinesP(dst, linesP, 1, Math.PI/180, 50, 50, 10); // runs the actual detection
+        
+//        double somatorio = 0;
+        double []angulacao_linhas = new double[linesP.rows()];
+        // Draw the lines
+        for (int x = 0; x < linesP.rows(); x++) {
+            double[] l = linesP.get(x, 0);
+            Imgproc.line(cdstP, new Point(l[0], l[1]), new Point(l[2], l[3]), new Scalar(0, 0, 255), 6, Imgproc.LINE_AA, 0);
+            
+            //calcula angulo de inclinação da reta
+            Point p1 = new Point(l[0], l[1]), p2 = new Point(l[2], l[3]);
+            double angle = Math.atan2(p1.y - p2.y, p1.x - p2.x);
+            double em_graus = angle * 180 / Math.PI; 
+            angulacao_linhas[x] = em_graus;
+            
+        }
+        Arrays.sort(angulacao_linhas);
+        // pega a mediana
+        int middle = angulacao_linhas.length/2;
+
+        if(middle > 0) {
+	        double mediana = angulacao_linhas[middle];
+//	        if(mediana<90)
+	        	mediana = mediana-90;
+//	        mediana = Math.abs(mediana);
+	        System.out.println("angulo em graus "+mediana);
+	        ang_rotacao = mediana;
+//	        cdstP = this.roda_img(cdstP, mediana-90);
+	        if(ang_rotacao < 0)
+	        	ang_rotacao = ang_rotacao+360;
+        }
+        
+        // Show results
+//        HighGui.imshow("Source", src);
+//        HighGui.imshow("Detected Lines (in red) - Standard Hough Line Transform", cdst);
+        
+        
+        String texto_tela = "Rotacao: "+ang_rotacao+ " graus";
+//        adiciona_texto_img(texto_tela, cdstP);
+//        HighGui.imshow("Linhas Hough", cdstP);
+////        // Wait and Exit
+//        HighGui.waitKey();
+//        
+//        HighGui.destroyWindow("Linhas Hough");
+//        System.exit(0);
+    }
+    
+    private void adiciona_texto_img(String texto, Mat img) {
+        Imgproc.putText (
+                img,                          // Matrix obj of the image
+                texto,          // Text to be added
+                new Point(0, 10),               // point
+                Core.FONT_HERSHEY_PLAIN,      // front face
+                1,                               // front scale
+                new Scalar(0, 255, 0),             // Scalar object for color
+                2                                // Thickness
+             );
+    }
+    
+    public double getPopularElement(double[] a)
+    {
+      int count = 1, tempCount;
+      double popular = a[0];
+      double temp = 0;
+      for (int i = 0; i < (a.length - 1); i++)
+      {
+        temp = a[i];
+        tempCount = 0;
+        for (int j = 1; j < a.length; j++)
+        {
+          if (temp == a[j])
+            tempCount++;
+        }
+        if (tempCount > count)
+        {
+          popular = temp;
+          count = tempCount;
+        }
+      }
+      return popular;
+    }
+    
 }
